@@ -6,6 +6,7 @@
 import collections
 import threading
 import time
+import socket
 
 def _rusage_load(stats, previous_load, elapsed_time):
   '''
@@ -97,20 +98,24 @@ class LoadManager(object):
     Update the load information for all of the servers.
     '''
     for key, server in self._servers.items():
-      with self._data_lock:
-        previous_load = self._load[key]
-        previous_time = self._last_updated[key]
+      try:
+        current_stats = server.stats()
+      except socket.error:
+        continue
+      else:
+        with self._data_lock:
+          previous_load = self._load[key]
+          previous_time = self._last_updated[key]
 
-      current_stats = server.stats()
-      elapsed_time = current_stats['uptime'] - previous_time
-      total_load, current_load = self._load_key(
-        current_stats, previous_load, elapsed_time)
+        elapsed_time = current_stats['uptime'] - previous_time
+        total_load, current_load = self._load_key(
+          current_stats, previous_load, elapsed_time)
 
-      with self._data_lock:
-        self._inst_load[key] = current_load
-        self._load[key] = total_load
-        self._last_updated[key] = current_stats['uptime']
-        self._moving_averages[key].add_point(current_load)
+        with self._data_lock:
+          self._inst_load[key] = current_load
+          self._load[key] = total_load
+          self._last_updated[key] = current_stats['uptime']
+          self._moving_averages[key].add_point(current_load)
 
 class MovingAverage(object):
   '''
