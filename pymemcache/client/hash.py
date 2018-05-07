@@ -102,7 +102,7 @@ class HashClient(object):
             client = Client((server, port), **self.default_kwargs)
 
         self.clients[key] = client
-        self.hasher.add_node(key)
+        self.hasher.add_node(key, client)
 
     def remove_server(self, server, port):
         dead_time = time.time()

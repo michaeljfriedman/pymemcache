@@ -20,7 +20,7 @@ class RendezvousHash(object):
             self.nodes = nodes
         self.hash_function = lambda x: hash_function(x, seed)
 
-    def add_node(self, node):
+    def add_node(self, key, node):
         if node not in self.nodes:
             self.nodes.append(node)
 
