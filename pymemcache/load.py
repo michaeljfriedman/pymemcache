@@ -7,13 +7,14 @@ import collections
 import threading
 import time
 
-def _rusage_load(stats):
+def _rusage_load(stats, previous_load, elapsed_time):
   '''
   Get load information based on the rusage (CPU time used) both for the system
   and the user.
   '''
-  return (float(stats.get('rusage_user', 0))
-        + float(stats.get('rusage_system', 0)))
+  current_load = (float(stats.get('rusage_user', 0))
+                + float(stats.get('rusage_system', 0)))
+  return (current_load, float(current_load - previous_load) / elapsed_time)
 
 class LoadManager(object):
   '''
@@ -36,7 +37,9 @@ class LoadManager(object):
 
     self._data_lock = threading.Lock()
     self._moving_averages = {}
+    self._inst_load = {}
     self._load = {}
+    self._last_updated = {}
 
     self._thread = threading.Thread(target=self._periodic_load_update)
 
@@ -51,16 +54,20 @@ class LoadManager(object):
     '''
     with self._data_lock:
       self._servers[key] = client
-      self._load[key] = 0
       self._moving_averages[key] = MovingAverage(self._window_size)
+      self._inst_load[key] = 0
+      self._load[key] = 0
+      self._last_updated[key] = 0
 
   def remove_server(self, key):
     '''
     Remove a server from the manager.
     '''
     with self._data_lock:
-      del self._load[key]
       del self._moving_averages[key]
+      del self._inst_load[key]
+      del self._load[key]
+      del self._last_updated[key]
       del self._servers[key]
 
   def load(self):
@@ -68,7 +75,7 @@ class LoadManager(object):
     Get the current load information.
     '''
     with self._data_lock:
-      return self._load
+      return self._inst_load
 
   def average_load(self):
     '''
@@ -90,11 +97,20 @@ class LoadManager(object):
     Update the load information for all of the servers.
     '''
     for key, server in self._servers.items():
-      server_load = self._load_key(server.stats())
+      with self._data_lock:
+        previous_load = self._load[key]
+        previous_time = self._last_updated[key]
+
+      current_stats = server.stats()
+      elapsed_time = current_stats['uptime'] - previous_time
+      total_load, current_load = self._load_key(
+        current_stats, previous_load, elapsed_time)
 
       with self._data_lock:
-        self._load[key] = server_load
-        self._moving_averages[key].add_point(server_load)
+        self._inst_load[key] = current_load
+        self._load[key] = total_load
+        self._last_updated[key] = current_stats['uptime']
+        self._moving_averages[key].add_point(current_load)
 
 class MovingAverage(object):
   '''
@@ -116,10 +132,9 @@ class MovingAverage(object):
     '''
     Add a point to the moving average.
     '''
-    if self._current_size + 1 == self._window_size:
+    if len(self._window) + 1 == self._window_size:
       removed = self._window.popleft()
       self._current_average -= float(removed) / self._window_size
 
     self._window.append(x)
     self._current_average += float(x) / self._window_size
-
