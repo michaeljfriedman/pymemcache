@@ -100,21 +100,24 @@ class LoadManager(object):
     for key, server in self._servers.items():
       try:
         current_stats = server.stats()
-      except socket.error:
+      except (socket.error, TypeError):
         continue
       else:
         with self._data_lock:
           previous_load = self._load[key]
           previous_time = self._last_updated[key]
 
-        elapsed_time = current_stats['uptime'] - previous_time
+        try:
+          elapsed_time = current_stats['uptime'] - previous_time
+        except KeyError:
+          elapsed_time = self._refresh_rate
         total_load, current_load = self._load_key(
           current_stats, previous_load, elapsed_time)
 
         with self._data_lock:
           self._inst_load[key] = current_load
           self._load[key] = total_load
-          self._last_updated[key] = current_stats['uptime']
+          self._last_updated[key] += elapsed_time
           self._moving_averages[key].add_point(current_load)
 
 class MovingAverage(object):

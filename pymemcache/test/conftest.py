@@ -19,6 +19,14 @@ def pytest_addoption(parser):
                      default=10000,
                      help='amount of values to use in  benchmarks')
 
+    parser.addoption('--hash_servers', action='store',
+                     default='localhost:11211',
+                     help='memcached servers to use in benchmark, as host:port,...')
+
+    parser.addoption('--alpha', action='store',
+                     default='2',
+                     help='Alpha value for Zipfian distribution')
+
 
 @pytest.fixture(scope='session')
 def host(request):
@@ -38,6 +46,20 @@ def size(request):
 @pytest.fixture(scope='session')
 def count(request):
     return int(request.config.option.count)
+
+
+@pytest.fixture(scope='session')
+def hash_servers(request):
+    servers = []
+    for s in request.config.option.hash_servers.split(','):
+        host, port = s.split(':')
+        servers.append((host, int(port)))
+    return servers
+
+
+@pytest.fixture(scope='session')
+def alpha(request):
+    return float(request.config.option.alpha)
 
 
 def pytest_generate_tests(metafunc):
