@@ -20,15 +20,15 @@ class RendezvousHash(object):
             self.nodes = nodes
         self.hash_function = lambda x: hash_function(x, seed)
 
-    def add_node(self, key, node):
-        if node not in self.nodes:
-            self.nodes.append(node)
+    def add_node(self, key, node=None):
+        if key not in self.nodes:
+            self.nodes.append(key)
 
-    def remove_node(self, node):
-        if node in self.nodes:
-            self.nodes.remove(node)
+    def remove_node(self, key):
+        if key in self.nodes:
+            self.nodes.remove(key)
         else:
-            raise ValueError("No such node %s to remove" % (node))
+            raise ValueError("No such node %s to remove" % (key))
 
     def get_node(self, key):
         high_score = -1
