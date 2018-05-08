@@ -100,7 +100,7 @@ class LoadManager(object):
     for key, server in self._servers.items():
       try:
         current_stats = server.stats()
-      except socket.error:
+      except (socket.error, TypeError):
         continue
       else:
         with self._data_lock:
