@@ -33,16 +33,32 @@ class LoadManager(object):
   average of the load.
   '''
   def __init__(self, refresh_rate=1, key=_rusage_load, window_size=10):
-    self._servers = {}
     self._refresh_rate = int(refresh_rate)
     self._load_key = key
     self._window_size = window_size
 
+    # This lock is held solely on _servers.
+    self._server_lock = threading.Lock()
+    self._servers = collections.defaultdict(
+      lambda: {
+        'client': None,
+        'load': 0,
+        'moving_average': MovingAverage(self._window_size),
+        'last_updated': 0,
+        })
+
+    # The lock is held on _moving_averages and _inst_load.
+    # NOTE: This lock should *not* be held in conjunction with _server_lock.
+    #       Locks are held with mutual exclusion to prevent any deadlock
+    #       situation from arising. Locks should always be acquired in the
+    #       order of _server_lock, _data_lock.
     self._data_lock = threading.Lock()
-    self._moving_averages = {}
-    self._inst_load = {}
-    self._load = {}
-    self._last_updated = {}
+
+    # This data provides a 'view' into the data stored per-server, which
+    # allows for faster returns to the client requesting load information.
+    # In particular, it also allows the locks to be more granular.
+    self._moving_averages = collections.defaultdict(int)
+    self._inst_load = collections.defaultdict(int)
 
     self._thread = threading.Thread(target=self._periodic_load_update)
 
@@ -55,23 +71,20 @@ class LoadManager(object):
     '''
     Add a server to the manager.
     '''
-    with self._data_lock:
-      self._servers[key] = pymemcache.client.base.Client(server)
-      self._moving_averages[key] = MovingAverage(self._window_size)
-      self._inst_load[key] = 0
-      self._load[key] = 0
-      self._last_updated[key] = 0
+    with self._server_lock:
+      s = self._servers[key]
+      s['client'] = pymemcache.client.base.Client(server)
 
   def remove_server(self, key):
     '''
     Remove a server from the manager.
     '''
+    with self._server_lock:
+      del self._servers[key]
+
     with self._data_lock:
       del self._moving_averages[key]
       del self._inst_load[key]
-      del self._load[key]
-      del self._last_updated[key]
-      del self._servers[key]
 
   def load(self):
     '''
@@ -85,7 +98,7 @@ class LoadManager(object):
     Get the average load over the window size.
     '''
     with self._data_lock:
-      return {key: ma.average() for key, ma in self._moving_averages.items()}
+      return self._moving_averages
 
   def _periodic_load_update(self):
     '''
@@ -99,28 +112,37 @@ class LoadManager(object):
     '''
     Update the load information for all of the servers.
     '''
-    for key, server in self._servers.items():
-      try:
-        current_stats = server.stats()
-      except (socket.error, TypeError):
-        continue
-      else:
-        with self._data_lock:
-          previous_load = self._load[key]
-          previous_time = self._last_updated[key]
+    # The updates are performed in a thread-specific data structure so that the
+    # two locks are not held simultaneously. In addition, it prevents one
+    # server from having more up-to-date information than another (unless there
+    # is an error).
+    updated_inst_loads = {}
+    updated_moving_averages = {}
 
+    with self._server_lock:
+      for key, server in self._servers.items():
         try:
-          elapsed_time = current_stats['uptime'] - previous_time
-        except KeyError:
-          elapsed_time = self._refresh_rate
-        total_load, current_load = self._load_key(
-          current_stats, previous_load, elapsed_time)
+          server_stats = server['client'].stats()
+        except (socket.error, TypeError):
+          continue
+        else:
+          try:
+            elapsed_time = server_stats['uptime'] - server['last_updated']
+          except KeyError:
+            elapsed_time = self._refresh_rate
+          total_load, current_load = self._load_key(
+            server_stats, server['load'], elapsed_time)
 
-        with self._data_lock:
-          self._inst_load[key] = current_load
-          self._load[key] = total_load
-          self._last_updated[key] += elapsed_time
-          self._moving_averages[key].add_point(current_load)
+          server['load'] = total_load
+          server['last_updated'] += elapsed_time
+          server['moving_average'].add_point(current_load)
+
+          updated_inst_loads[key] = current_load
+          updated_moving_averages[key] = server['moving_average'].average()
+
+    with self._data_lock:
+      self._inst_load.update(updated_inst_loads)
+      self._moving_averages.update(updated_moving_averages)
 
 class MovingAverage(object):
   '''
