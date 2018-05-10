@@ -1,17 +1,22 @@
-# benchmark.py
-# Benchmark the memcached server across a Zipfian distribution.
+# latency.py
+# Benchmark the memcached server latency across a Zipfian distribution.
 
-from pymemcache.client.hash import HashClient
-from pymemcache.client.rendezvous_load import RendezvousLoadHash
-
+import os.path
 import time
 import sys
 import numpy.random
 import hashlib
 
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+if not BASE_DIR in sys.path:
+  sys.path.append(BASE_DIR)
+
+from pymemcache.client.hash import HashClient
+from pymemcache.client.rendezvous_load import RendezvousLoadHash
+
 def main():
   if len(sys.argv) < 3:
-    sys.stderr.write('usage: python benchmark.py COUNT ALPHA CLIENT HOST...\n')
+    sys.stderr.write('usage: python latency.py COUNT ALPHA CLIENT HOST...\n')
     sys.exit(1)
 
   count = int(sys.argv[1])
