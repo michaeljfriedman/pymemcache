@@ -20,7 +20,7 @@ class RendezvousLoadHash(object):
 
   def add_node(self, key, server):
     self.nodes.add(key)
-    self.load_manager.add_server(key, server)
+    self.load_manager.add_server(key, server.server)
 
   def remove_node(self, key):
     self.nodes.remove(key)

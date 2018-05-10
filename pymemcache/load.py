@@ -3,6 +3,8 @@
 # Date: May 6th, 2018
 # Description: Manages load statistics for a set of memcached servers.
 
+import pymemcache.client.base
+
 import collections
 import threading
 import time
@@ -49,12 +51,12 @@ class LoadManager(object):
     self._thread.daemon = True
     self._thread.start()
 
-  def add_server(self, key, client):
+  def add_server(self, key, server):
     '''
     Add a server to the manager.
     '''
     with self._data_lock:
-      self._servers[key] = client
+      self._servers[key] = pymemcache.client.base.Client(server)
       self._moving_averages[key] = MovingAverage(self._window_size)
       self._inst_load[key] = 0
       self._load[key] = 0
