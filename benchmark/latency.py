@@ -9,6 +9,8 @@ import hashlib
 import multiprocessing
 import tempfile
 import shutil
+import socket
+import errno
 
 from numpy.random import zipf
 
@@ -89,13 +91,17 @@ def run_benchmark(client_t, hosts, count, alpha, path):
   for _ in range(count):
     key = str(zipf(alpha))
 
-    status = 1
+    status = 0
     start_time = time.time()
     try:
       client.get(key)
-    except socket.error:
-      status = 0
+    except socket.error as e:
+      status = e.errno
     elapsed = time.time() - start_time
+
+    if status in {errno.ETIMEDOUT, errno.ECONNRESET}:
+      # Client probably got botched, so reset the client for future requests.
+      client = get_client(client_t, hosts)
 
     stream.write('%s,%f,%d' % (key, elapsed, status))
     stream.write('\n')
