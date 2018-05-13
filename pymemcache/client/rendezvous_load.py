@@ -16,15 +16,6 @@ class RendezvousLoadHash(object):
     self.nodes = set()
     self.load_manager = LoadManager(load_metric=load_metric)
 
-    # Set load threshold. If a server's load is above this value, we consider
-    # it "loaded"
-    if load_metric == rusage_load:
-      self.load_threshold = 0.8
-    elif load_metric == cum_req_load:
-      self.load_threshold = 100 # arbitrary choice
-    else:
-      raise Exception('Invalid load metric')
-
     if not nodes is None:
       for key, server in nodes:
         self.add_node(key, server)
@@ -42,16 +33,22 @@ class RendezvousLoadHash(object):
     winner_by_score = None
     winner_overall = None
 
-    server_loads = self.load_manager.load()
+    # server_loads is instantaneous load whereas load_statistics is a moving
+    # set of statistics over the load.
+    inst_server_loads = self.load_manager.load()
+    load_statistics = self.load_manager.load_statistics()
 
     # Pick highest-weight server that isn't loaded. Otherwise default to
     # server with highest score
     for node in self.nodes:
         score = murmur3_32("%s-%s" % (node, key))
+        stats = load_statistics[node]
+
+        load_threshold = stats['average'] + 2*stats['stddev']
 
         if score > high_score:
           (high_score, winner_by_score) = (score, node)
-          if server_loads[node] < self.load_threshold:
+          if inst_server_loads[node] < load_threshold:
               winner_overall = node
 
     if not winner_overall:

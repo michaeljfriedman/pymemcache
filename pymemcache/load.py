@@ -8,6 +8,7 @@ import pymemcache.client.base
 import collections
 import threading
 import time
+import math
 import socket
 
 def rusage_load(stats, previous_load, elapsed_time):
@@ -45,7 +46,10 @@ class LoadManager(object):
   `window_size` is the size of the window used for calculating the moving
   average of the load.
   '''
-  def __init__(self, refresh_rate=1, load_metric=rusage_load, window_size=10):
+  def __init__(self,
+      refresh_rate=1,
+      load_metric=cum_req_load,
+      window_size=100):
     self._refresh_rate = int(refresh_rate)
     self._load_metric = load_metric
     self._window_size = window_size
@@ -56,11 +60,11 @@ class LoadManager(object):
       lambda: {
         'client': None,
         'load': 0,
-        'moving_average': MovingAverage(self._window_size),
+        'moving_statistics': MovingStatistics(self._window_size),
         'last_updated': 0,
         })
 
-    # The lock is held on _moving_averages and _inst_load.
+    # The lock is held on _moving_statistics and _inst_load.
     # NOTE: This lock should *not* be held in conjunction with _server_lock.
     #       Locks are held with mutual exclusion to prevent any deadlock
     #       situation from arising. Locks should always be acquired in the
@@ -70,7 +74,10 @@ class LoadManager(object):
     # This data provides a 'view' into the data stored per-server, which
     # allows for faster returns to the client requesting load information.
     # In particular, it also allows the locks to be more granular.
-    self._moving_averages = collections.defaultdict(int)
+    self._moving_statistics = collections.defaultdict(lambda: {
+      'average': 0,
+      'stddev': 0,
+      })
     self._inst_load = collections.defaultdict(int)
 
     self._thread = threading.Thread(target=self._periodic_load_update)
@@ -96,7 +103,7 @@ class LoadManager(object):
       del self._servers[key]
 
     with self._data_lock:
-      del self._moving_averages[key]
+      del self._moving_statistics[key]
       del self._inst_load[key]
 
   def load(self):
@@ -105,13 +112,13 @@ class LoadManager(object):
     '''
     with self._data_lock:
       return self._inst_load
-
-  def average_load(self):
+ 
+  def load_statistics(self):
     '''
     Get the average load over the window size.
     '''
     with self._data_lock:
-      return self._moving_averages
+      return self._moving_statistics
 
   def _periodic_load_update(self):
     '''
@@ -130,7 +137,7 @@ class LoadManager(object):
     # server from having more up-to-date information than another (unless there
     # is an error).
     updated_inst_loads = {}
-    updated_moving_averages = {}
+    updated_moving_statistics = {}
 
     with self._server_lock:
       for key, server in self._servers.items():
@@ -148,30 +155,41 @@ class LoadManager(object):
 
           server['load'] = total_load
           server['last_updated'] += elapsed_time
-          server['moving_average'].add_point(current_load)
+
+          moving_stats = server['moving_statistics']
+          moving_stats.add_point(current_load)
 
           updated_inst_loads[key] = current_load
-          updated_moving_averages[key] = server['moving_average'].average()
+          updated_moving_statistics[key] = {
+            'average': moving_stats.average(),
+            'stddev': moving_stats.stddev(),
+            }
 
     with self._data_lock:
       self._inst_load.update(updated_inst_loads)
-      self._moving_averages.update(updated_moving_averages)
+      self._moving_statistics.update(updated_moving_statistics)
 
-class MovingAverage(object):
+class MovingStatistics(object):
   '''
   Calculate moving averages over data of a window size `window_size`.
   '''
   def __init__(self, window_size):
     self._window_size = window_size
-    self._current_size = 0
-    self._current_average = 0
+    self._average = 0
+    self._stddev = 0
     self._window = collections.deque(maxlen=window_size)
 
   def average(self):
     '''
     Get the current moving average.
     '''
-    return self._current_average
+    return self._average
+
+  def stddev(self):
+    '''
+    Get the current standard deviation.
+    '''
+    return self._stddev
 
   def add_point(self, x):
     '''
@@ -179,7 +197,11 @@ class MovingAverage(object):
     '''
     if len(self._window) + 1 == self._window_size:
       removed = self._window.popleft()
-      self._current_average -= float(removed) / self._window_size
+      self._average -= float(removed) / self._window_size
+
+      self._stddev = math.sqrt(sum(map(
+        lambda x: float(self._average - x)**2,
+        self._window)) / (self._window_size - 1))
 
     self._window.append(x)
-    self._current_average += float(x) / self._window_size
+    self._average += float(x) / self._window_size
