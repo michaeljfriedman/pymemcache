@@ -26,7 +26,8 @@ def main():
 
   concurrency = int(sys.argv[1])
   count = int(sys.argv[2])
-  alpha = int(sys.argv[3])
+  alpha = float(sys.argv[3])
+  # alpha of 1.135 corresponds to a 80-20 distribution
   client_t = sys.argv[4]
   hosts = sys.argv[5:]
 
