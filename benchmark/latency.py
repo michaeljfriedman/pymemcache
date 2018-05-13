@@ -18,6 +18,7 @@ if not BASE_DIR in sys.path:
 
 from pymemcache.client.hash import HashClient
 from pymemcache.client.rendezvous_load import RendezvousLoadHash
+from pymemcache.load import rusage_load
 
 def main():
   if len(sys.argv) < 3:
@@ -88,11 +89,15 @@ def run_benchmark(client_t, hosts, count, alpha, path):
   for _ in range(count):
     key = str(zipf(alpha))
 
+    status = 1
     start_time = time.time()
-    client.get(key)
+    try:
+      client.get(key)
+    except socket.error:
+      status = 0
     elapsed = time.time() - start_time
 
-    stream.write('%s,%s' % (key, elapsed))
+    stream.write('%s,%f,%d' % (key, elapsed, status))
     stream.write('\n')
 
   stream.close()
@@ -104,7 +109,8 @@ def get_client(client_t, hosts):
   if client_t == 'hash':
     return HashClient(servers=hosts)
   elif client_t == 'load':
-    return HashClient(servers=hosts, hasher=RendezvousLoadHash)
+    return HashClient(
+      servers=hosts, hasher=RendezvousLoadHash)
   else:
     sys.stderr.write('client_t must be one of: hash, load\n')
     sys.exit(1)
