@@ -66,6 +66,7 @@ def main():
   for path in processes.values():
     with open(path, 'r') as stream:
       shutil.copyfileobj(stream, sys.stdout)
+    os.remove(path)
 
   sys.exit(0)
 
