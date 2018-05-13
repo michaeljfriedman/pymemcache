@@ -14,5 +14,5 @@ fi
 mkdir -p "data/$client_t/"
 
 for ((c=$start;c<=$end;c+=$step)); do
-  python benchmark/concurrent_latency.py $c "${@:4}" > "data/$client_t/benchmark_concurrency_$c"
+  python benchmark/latency.py $c "${@:4}" > "data/$client_t/benchmark_$c"
 done
