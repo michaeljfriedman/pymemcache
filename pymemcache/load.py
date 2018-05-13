@@ -10,7 +10,7 @@ import threading
 import time
 import socket
 
-def _rusage_load(stats, previous_load, elapsed_time):
+def rusage_load(stats, previous_load, elapsed_time):
   '''
   Get load information based on the rusage (CPU time used) both for the system
   and the user.
@@ -19,6 +19,19 @@ def _rusage_load(stats, previous_load, elapsed_time):
                 + float(stats.get('rusage_system', 0)))
   return (current_load, float(current_load - previous_load) / elapsed_time)
 
+def cum_req_load(stats, previous_num_reqs, elapsed_time):
+  '''
+  Get load information based on the cumulative number of requests handled by
+  this server. Returns current total number of requestss, and average requests
+  per second over the elapsed_time interval.
+  '''
+  current_num_reqs = (float(stats.get('cmd_get', 0))
+                   + float(stats.get('cmd_set', 0))
+                   + float(stats.get('cmd_flush', 0))
+                   + float(stats.get('cmd_touch', 0)))
+  return (current_num_reqs,
+    float(current_num_reqs - previous_num_reqs) / elapsed_time)
+
 class LoadManager(object):
   '''
   Manage load statistics for a set of memcached servers. Provided servers have
@@ -26,15 +39,15 @@ class LoadManager(object):
 
   `refresh_rate` is how frequently the data is refreshed (in seconds).
 
-  `key` is the key function to map server statistics to a load indicator (as a
-  float).
+  `load_metric` is the key function to map server statistics to a load indicator
+  (as a float).
 
   `window_size` is the size of the window used for calculating the moving
   average of the load.
   '''
-  def __init__(self, refresh_rate=1, key=_rusage_load, window_size=10):
+  def __init__(self, refresh_rate=1, load_metric=rusage_load, window_size=10):
     self._refresh_rate = int(refresh_rate)
-    self._load_key = key
+    self._load_metric = load_metric
     self._window_size = window_size
 
     # This lock is held solely on _servers.
@@ -130,7 +143,7 @@ class LoadManager(object):
             elapsed_time = server_stats['uptime'] - server['last_updated']
           except KeyError:
             elapsed_time = self._refresh_rate
-          total_load, current_load = self._load_key(
+          total_load, current_load = self._load_metric(
             server_stats, server['load'], elapsed_time)
 
           server['load'] = total_load

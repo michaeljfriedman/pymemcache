@@ -4,7 +4,9 @@ import logging
 
 from pymemcache.client.base import Client, PooledClient, _check_key
 from pymemcache.client.rendezvous import RendezvousHash
+from pymemcache.client.rendezvous_load import RendezvousLoadHash
 from pymemcache.exceptions import MemcacheError
+from pymemcache.load import LoadManager, rusage_load
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +19,7 @@ class HashClient(object):
         self,
         servers,
         hasher=RendezvousHash,
+        load_metric=rusage_load,
         serializer=None,
         deserializer=None,
         connect_timeout=None,
@@ -41,6 +44,9 @@ class HashClient(object):
           hasher: optional class three functions ``get_node``, ``add_node``,
                   and ``remove_node``
                   defaults to Rendezvous (HRW) hash.
+          load_metric: if `hasher` is one that makes use of a LoadManager (e.g.
+                       RendezvousLoadHash), this is the load metric that will
+                       be passed to its constructor.
 
           use_pooling: use py:class:`.PooledClient` as the default underlying
                        class. ``max_pool_size`` and ``lock_generator`` can
@@ -68,7 +74,10 @@ class HashClient(object):
         self._dead_clients = {}
         self._last_dead_check_time = time.time()
 
-        self.hasher = hasher()
+        if hasher == RendezvousLoadHash:
+          self.hasher = hasher(load_metric=load_metric)
+        else:
+          self.hasher = hasher()
 
         self.default_kwargs = {
             'connect_timeout': connect_timeout,
