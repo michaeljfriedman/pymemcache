@@ -5,11 +5,12 @@
 import os.path
 import time
 import sys
-import numpy.random
 import hashlib
 import multiprocessing
 import tempfile
 import shutil
+
+from numpy.random import zipf
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 if not BASE_DIR in sys.path:
@@ -72,7 +73,7 @@ def initialize_benchmark(client_t, parsed_hosts, count, alpha):
   client.flush_all()
 
   for _ in range(count):
-    key = str(numpy.random.zipf(alpha))
+    key = str(zipf(alpha))
     value = hashlib.sha256(bytes(key)).digest()
     client.set(key, value)
 
@@ -84,13 +85,13 @@ def run_benchmark(client_t, hosts, count, alpha, path):
   stream = open(path, 'w')
 
   for _ in range(count):
-    key = str(numpy.random.zipf(alpha))
+    key = str(zipf(alpha))
 
     start_time = time.time()
     client.get(key)
     elapsed = time.time() - start_time
 
-    stream.write(str(elapsed))
+    stream.write('%s,%s' % (key, elapsed))
     stream.write('\n')
 
   stream.close()
