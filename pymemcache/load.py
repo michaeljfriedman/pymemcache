@@ -25,10 +25,10 @@ def cum_req_load(stats, previous_num_reqs, elapsed_time):
   this server. Returns current total number of requestss, and average requests
   per second over the elapsed_time interval.
   '''
-  current_num_reqs = float(stats.get('cmd_get', 0))
+  current_num_reqs = (float(stats.get('cmd_get', 0))
                    + float(stats.get('cmd_set', 0))
                    + float(stats.get('cmd_flush', 0))
-                   + float(stats.get('cmd_touch', 0))
+                   + float(stats.get('cmd_touch', 0)))
   return (current_num_reqs,
     float(current_num_reqs - previous_num_reqs) / elapsed_time)
 
@@ -47,7 +47,7 @@ class LoadManager(object):
   '''
   def __init__(self, refresh_rate=1, load_metric=rusage_load, window_size=10):
     self._refresh_rate = int(refresh_rate)
-    self._load_key = key
+    self._load_metric = load_metric
     self._window_size = window_size
 
     # This lock is held solely on _servers.
@@ -143,7 +143,7 @@ class LoadManager(object):
             elapsed_time = server_stats['uptime'] - server['last_updated']
           except KeyError:
             elapsed_time = self._refresh_rate
-          total_load, current_load = self._load_key(
+          total_load, current_load = self._load_metric(
             server_stats, server['load'], elapsed_time)
 
           server['load'] = total_load

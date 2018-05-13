@@ -6,7 +6,7 @@ from pymemcache.client.base import Client, PooledClient, _check_key
 from pymemcache.client.rendezvous import RendezvousHash
 from pymemcache.client.rendezvous_load import RendezvousLoadHash
 from pymemcache.exceptions import MemcacheError
-from pymemcache.load import LoadManager
+from pymemcache.load import LoadManager, rusage_load
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +19,7 @@ class HashClient(object):
         self,
         servers,
         hasher=RendezvousHash,
-        load_metric=LoadManager.rusage_load,
+        load_metric=rusage_load,
         serializer=None,
         deserializer=None,
         connect_timeout=None,

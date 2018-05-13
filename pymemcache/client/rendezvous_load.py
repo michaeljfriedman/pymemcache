@@ -4,7 +4,7 @@
 # Description: Rendevouz hashing based on load.
 
 from pymemcache.client.rendezvous import RendezvousHash
-from pymemcache.load import LoadManager
+from pymemcache.load import LoadManager, rusage_load, cum_req_load
 from pymemcache.client.murmur3 import murmur3_32
 
 class RendezvousLoadHash(object):
@@ -12,15 +12,15 @@ class RendezvousLoadHash(object):
   Rendezvous Hashing based on load information.
   '''
 
-  def __init__(self, nodes=None, load_metric=LoadManager.rusage_load):
+  def __init__(self, nodes=None, load_metric=rusage_load):
     self.nodes = set()
     self.load_manager = LoadManager(load_metric=load_metric)
 
     # Set load threshold. If a server's load is above this value, we consider
     # it "loaded"
-    if load_metric == LoadManager.rusage_load:
+    if load_metric == rusage_load:
       self.load_threshold = 0.8
-    elif load_metric == LoadManager.cum_req_load:
+    elif load_metric == cum_req_load:
       self.load_threshold = 100 # arbitrary choice
     else:
       raise Exception('Invalid load metric')
