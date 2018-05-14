@@ -50,6 +50,20 @@ for server in $servers; do
   echo "$server"
 done
 
+if [ -d "$output_dir" ]; then
+  print "Output directory $output dir already exists. Exiting to avoid overwriting data..."
+  exit 1
+fi
+
+# Actual benchmarks start now.
+# Confirm user.
+read -p "Start the benchmark? " -n 1 -r
+echo
+if ! [[ $REPLY =~ ^[Yy]$ ]]; then
+  echo "Cancelling..."
+  exit 2
+fi
+
 run_command "Make data directory" mkdir -p "$output_dir"
 
 run_command "Initialize Cache" python benchmark/initialize.py "$num_keys $alpha $servers > $output_dir/keys"
@@ -64,6 +78,8 @@ for client_t in "${client_types[@]}"; do
     run_command "Benchmark 2.$c on $client_t" python benchmark/latency.py "$c $concurrency_range_count $alpha $output_dir/keys 0 $client_t $servers > $output_dir/$client_t/range_$c"
     sleep 5
   done
+
+  run_command "Aggregate range statistics for $client_t" python benchmark/aggregate_stats.py "$output_dir/$client_t/range_ $output_dir/$client_t/range_* > $output_dir/$client_t/aggregate_range"
 done
 
 print "> Generated Data:"
