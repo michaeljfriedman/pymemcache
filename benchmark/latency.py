@@ -117,8 +117,10 @@ def get_client(client_t, hosts):
   if client_t == 'hash':
     return HashClient(servers=hosts)
   elif client_t == 'load':
+    return HashClient(servers=hosts, hasher=RendezvousLoadHash)
+  elif client_t == 'load-rusage':
     return HashClient(
-      servers=hosts, hasher=RendezvousLoadHash)
+      servers=hosts, hasher=RendezvousLoadHash, load_metric=rusage_load)
   else:
     sys.stderr.write('client_t must be one of: hash, load\n')
     sys.exit(1)
