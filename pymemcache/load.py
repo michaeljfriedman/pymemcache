@@ -100,15 +100,16 @@ class LoadManager(object):
     Remove a server from the manager.
     '''
     with self._server_lock:
-      cl =  self._servers[key]['client']
-      if cl:
-        cl.close()
+      if key in self._servers:
+        cl =  self._servers[key]['client']
+        if cl:
+          cl.close()
 
-      del self._servers[key]
+        self._servers.pop(key, None)
 
     with self._data_lock:
-      del self._moving_statistics[key]
-      del self._inst_load[key]
+      self._moving_statistics.pop(key, None)
+      self._inst_load.pop(key, None)
 
   def load(self):
     '''
