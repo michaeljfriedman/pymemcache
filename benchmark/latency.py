@@ -22,24 +22,32 @@ from pymemcache.client.hash import HashClient
 from pymemcache.client.rendezvous_load import RendezvousLoadHash
 from pymemcache.load import rusage_load
 
+NUM_KEYS = int(1e6)
+
 def main():
-  if len(sys.argv) < 3:
-    sys.stderr.write('usage: python latency.py CONCURRENCY COUNT ALPHA CLIENT_TYPE HOST...\n')
+  if len(sys.argv) <= 7:
+    sys.stderr.write('usage: python latency.py CONCURRENCY COUNT ALPHA KEYS SET_KEYS CLIENT_TYPE HOST...\n')
     sys.exit(1)
 
   concurrency = int(sys.argv[1])
   count = int(sys.argv[2])
   alpha = float(sys.argv[3])
   # alpha of 1.135 corresponds to a 80-20 distribution
-  client_t = sys.argv[4]
-  hosts = sys.argv[5:]
+  keys_path = sys.argv[4]
+  set_keys = bool(int(sys.argv[5]))
+  client_t = sys.argv[6]
+  hosts = sys.argv[7:]
 
   parsed_hosts = []
   for h in hosts:
     host, port = h.split(':')
     parsed_hosts.append((host, int(port)))
 
-  initialize_benchmark(client_t, parsed_hosts, count, alpha)
+  keys = set()
+  if keys_path != '-':
+    with open(keys_path, 'r') as f:
+      for line in f:
+        keys.add(int(line))
   
   # Spawn `concurrency` processes, one per concurrent client.
   start_time = time.time()
@@ -51,7 +59,7 @@ def main():
 
     p = multiprocessing.Process(
       target=run_benchmark,
-      args=(client_t, parsed_hosts, count, alpha, path))
+      args=(client_t, parsed_hosts, count, alpha, path, keys, set_keys))
 
     processes[p] = path
     p.start()
@@ -70,19 +78,7 @@ def main():
 
   sys.exit(0)
 
-def initialize_benchmark(client_t, parsed_hosts, count, alpha):
-  '''
-  Initialize the benchmark.
-  '''
-  client = get_client(client_t, parsed_hosts)
-  client.flush_all()
-
-  for _ in range(count):
-    key = str(zipf(alpha))
-    value = hashlib.sha256(bytes(key)).digest()
-    client.set(key, value)
-
-def run_benchmark(client_t, hosts, count, alpha, path):
+def run_benchmark(client_t, hosts, count, alpha, path, keys, set_keys):
   '''
   Run the benchmark.
   '''
@@ -90,22 +86,35 @@ def run_benchmark(client_t, hosts, count, alpha, path):
   stream = open(path, 'w')
 
   for _ in range(count):
-    key = str(zipf(alpha))
+    k = zipf(alpha)
+    key = str(k)
 
     status = 0
     start_time = time.time()
     try:
-      client.get(key)
+      resp = client.get(key)
     except socket.error as e:
       status = e.errno
     elapsed = time.time() - start_time
+
+    # resp_state is 0 if the response fails and the key exists or if the
+    # response succeeds and the key should not be there; it is 1 otherwise.
+    resp_state = int((resp is not None) == (k in keys))
+
+    # If we should set the keys and the response did not succeed and the key
+    # was originally set, we should store the key in the cache.
+    if set_keys and k in keys and resp is None:
+      start_time = time.time()
+      client.set(key, hashlib.sha256(bytes(key)).digest())
+      resp_state = 2
+      elapsed += time.time() - start_time
 
     if status in {errno.ETIMEDOUT, errno.ECONNRESET}:
       # Client probably got botched, so reset the client for future requests.
       client.close()
       client = get_client(client_t, hosts)
-
-    stream.write('%s,%f,%d' % (key, elapsed, status))
+    
+    stream.write('%d,%f,%d,%d' % (k, elapsed, status, resp_state))
     stream.write('\n')
 
   stream.close()

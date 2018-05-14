@@ -4,7 +4,7 @@
 start=$1
 end=$2
 step=$3
-client_t=$6
+client_t=$8
 
 if [ -z ${client_t+x} ]; then
   echo "See usage..."
