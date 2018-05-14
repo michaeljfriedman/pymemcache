@@ -115,10 +115,19 @@ class HashClient(object):
 
     def remove_server(self, server, port):
         dead_time = time.time()
-        self._failed_clients.pop((server, port))
+        self._failed_clients.pop((server, port), None)
         self._dead_clients[(server, port)] = dead_time
         key = '%s:%s' % (server, port)
+        self.clients[key].close()
         self.hasher.remove_node(key)
+
+    def close(self):
+        '''
+        Close all connections.
+        '''
+        for key, client in self.clients.items():
+            server, port = client.server
+            self.remove_server(server, port)
 
     def _get_client(self, key):
         _check_key(key, self.allow_unicode_keys, self.key_prefix)

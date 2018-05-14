@@ -100,6 +100,10 @@ class LoadManager(object):
     Remove a server from the manager.
     '''
     with self._server_lock:
+      cl =  self._servers[key]['client']
+      if cl:
+        cl.close()
+
       del self._servers[key]
 
     with self._data_lock:

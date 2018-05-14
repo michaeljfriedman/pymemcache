@@ -102,6 +102,7 @@ def run_benchmark(client_t, hosts, count, alpha, path):
 
     if status in {errno.ETIMEDOUT, errno.ECONNRESET}:
       # Client probably got botched, so reset the client for future requests.
+      client.close()
       client = get_client(client_t, hosts)
 
     stream.write('%s,%f,%d' % (key, elapsed, status))
