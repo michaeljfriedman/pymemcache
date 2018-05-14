@@ -90,23 +90,28 @@ def run_benchmark(client_t, hosts, count, alpha, path, keys, set_keys):
     key = str(k)
 
     status = 0
+    client_failed = False
     start_time = time.time()
+    resp = None
     try:
       resp = client.get(key)
     except socket.error as e:
       status = e.errno
+      client_failed = True
+
     elapsed = time.time() - start_time
 
-    # resp_state is 0 if the response fails and the key exists or if the
+    # status is 0 if the response fails and the key exists or if the
     # response succeeds and the key should not be there; it is 1 otherwise.
-    resp_state = int((resp is not None) == (k in keys))
+    if not client_failed:
+      status = int((resp is not None) == (k in keys))
 
     # If we should set the keys and the response did not succeed and the key
     # was originally set, we should store the key in the cache.
-    if set_keys and k in keys and resp is None:
+    if set_keys and not client_failed and k in keys and resp is None:
       start_time = time.time()
       client.set(key, hashlib.sha256(bytes(key)).digest())
-      resp_state = 2
+      status = 2
       elapsed += time.time() - start_time
 
     if status in {errno.ETIMEDOUT, errno.ECONNRESET}:
@@ -114,7 +119,7 @@ def run_benchmark(client_t, hosts, count, alpha, path, keys, set_keys):
       client.close()
       client = get_client(client_t, hosts)
     
-    stream.write('%d,%f,%d,%d' % (k, elapsed, status, resp_state))
+    stream.write('%d,%f,%d,%d' % (k, elapsed, status, status))
     stream.write('\n')
 
   stream.close()
