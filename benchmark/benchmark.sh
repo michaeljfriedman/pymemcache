@@ -51,7 +51,7 @@ for server in $servers; do
 done
 
 if [ -d "$output_dir" ]; then
-  print "Output directory $output dir already exists. Exiting to avoid overwriting data..."
+  print "Output directory $output_dir already exists. Exiting to avoid overwriting data..."
   exit 1
 fi
 
